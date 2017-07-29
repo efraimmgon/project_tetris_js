@@ -1,24 +1,61 @@
 // ---------------------------------------------------------------------
+// Block Pieces
+// ---------------------------------------------------------------------
+
+var pieces = (function() {
+  // there is more than one kind of piece
+  //    2x2 squares
+  //    4x1 bars
+  //    L-shaped pieces (left-handed and right-handed)
+  //    S-shaped pieces (left-handed and right-handed)
+  var block = function(positions, board) {
+    anchor_x = random_between(0, board[0]);
+    return positions.map( ([x, y]) => [x + anchor_x, y] );
+
+  };
+
+  var make_piece = function(x, y, board) {
+    var coords = []
+    for (var x_ = 0; x_ < x; x_++) {
+      for (var y_ = 0; y_ < y; y_++) {
+        coords.push([x_, y_]);
+      }
+    }
+    return block.call(null, coords, board);
+  };
+
+  var small_square = board => block([[0,0]], board);
+  var square = board => make_piece(2, 2, board);
+  var bar = board => make_piece(4, 1, board);
+  var l = board => {
+    var positions = [
+      [0, 0], [0, 1], [0, 2],
+      [1, 0]
+    ];
+    return block(positions, board);
+  };
+
+  var random = (board) => {
+    var p = [small_square, square, bar, l];
+    var piece = rand_nth(p)(board);
+    return piece;
+  };
+
+  return {
+    small_square: small_square,
+    square: square,
+    bar: bar,
+    l: l,
+    random: random
+  };
+
+})();
+
+// ---------------------------------------------------------------------
 // App Specific Helpers
 // ---------------------------------------------------------------------
 
-var game_helpers = (function() {
-
-  // Pieces ------------------------------------------------------------
-
-  var block = function(body, board) {
-    anchor_x = random_between(0, board[0]);
-
-    return body.map(function(xy) {
-      var [x, y] = xy;
-      return [x + anchor_x, y];
-    });
-  };
-
-  // Starting out, imagine a board where only single, 1x1 blocks exist.
-  var small_square = function(board) {
-    return block([[0, 0]], board);
-  };
+var game_helpers = (function(pieces) {
 
   // Move the block ----------------------------------------------------
 
@@ -42,20 +79,25 @@ var game_helpers = (function() {
         [x, y] = db.board,
         border_x = new Set([x, -1]);
         border_y = y;
-        future_x = direction[0] + body[0][0],
-        future_y = direction[1] + body[0][1];
+        future_positions = body.map(([x, y]) => [x + direction[0], y + direction[1]]),
 
-    if (border_x.has(future_x)) {
+        future_xs = new Set(body.map(([x, y]) => direction[0] + x)),
+        future_ys = new Set(body.map(([x, y]) => direction[1] + y));
+        // pieces don't move past the left and right border
+    if (border_x.intersection(future_xs).size) {
       return true;
-    } else if (border_y === future_y || contains(db.fixed_block, [future_x, future_y])) {
-      // pieces stop moving once they touch something below them or touch the ground
+               // pieces stop moving once they touch the ground
+    } else if (future_ys.has(border_y) ||
+               // pieces stop moving once they touch another block below them
+               future_positions.some(xy => contains(db.fixed_block, xy))) {
+      // the piece is now fixed
       db.fixed_block.push(...db.block.body);
       // sort ascending by row
       db.fixed_block = db.fixed_block.sort(function(a, b) {
         return a[1] - b[1];
       });
       // every time a piece stops, a new one is born up top at a random x-coordinate
-      db.block.body = small_square(db.board);
+      db.block.body = pieces.random(db.board);
       return true
     }
   };
@@ -94,28 +136,29 @@ var game_helpers = (function() {
 
 
   return {
-    small_square: small_square,
     move_block: move_block,
     key_code_to_move: key_code_to_move,
     collisions: collisions,
     clear_full_row: clear_full_row
   };
 
-})();
+})(pieces);
 
 // ---------------------------------------------------------------------
 // Views
 // ---------------------------------------------------------------------
 
-var views = (function(game_helpers) {
+var views = (function(game_helpers, pieces) {
 
   var InitialState = function() {
     // A standard board is 10 blocks wide and 20 blocks high
-    var board = [10, 20];
+    // here are four hidden rows at the top of the screen (24 blocks high
+    // total), where pieces spawn
+    var board = [10, 24];
     var block = {
       // At regular intervals, any piece on the board moves down by one block
       direction: [0, 1],
-      body: game_helpers.small_square(board)
+      body: pieces.random(board)
     };
 
     this.board = board;
@@ -159,7 +202,9 @@ var views = (function(game_helpers) {
         var current_pos, $cell;
         current_pos = [x, y];
         $cell = $("<td></td>");
-        if (contains(db.block.body, current_pos)) {
+        if (y < 5) {
+          // hidden cell where new pieces spawn
+        } else if (contains(db.block.body, current_pos)) {
           $cell.addClass("block-on-cell");
         } else if (contains(db.fixed_block, current_pos)) {
           $cell.addClass("fixed-block");
@@ -181,7 +226,7 @@ var views = (function(game_helpers) {
     game_over: game_over
   };
 
-})(game_helpers);
+})(game_helpers, pieces);
 
 // ---------------------------------------------------------------------
 // Handlers
@@ -215,7 +260,7 @@ var handlers = (function(views, game_helpers) {
         views.board();
         // TODO: score
         //   views.score();
-        game_helpers.clear_full_row(db);
+        //game_helpers.clear_full_row(db);
       }
       return db;
     });

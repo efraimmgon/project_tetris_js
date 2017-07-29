@@ -107,6 +107,10 @@ var equals = function(arr1, arr2) {
   }
 };
 
+// ------------------------------------------------------------------------
+// Set and Pseudo-Set
+// ------------------------------------------------------------------------
+
 var contains = function(arr, obj) {
   if (obj.hasOwnProperty("length")) {
     return arr.some(function(node) {
@@ -129,6 +133,17 @@ function ArraySet(arr) {
   }
   return acc;
 }
+
+Set.prototype.intersection = function(setB) {
+    var intersection = new Set();
+    for (var elem of setB) {
+        if (this.has(elem)) {
+            intersection.add(elem);
+        }
+    }
+    return intersection;
+}
+
 
 // ------------------------------------------------------------------------
 // State Management Helpers
